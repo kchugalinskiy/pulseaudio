@@ -28,13 +28,13 @@ func Example() {
 	defer rec.Close()
 
 	for {
-		b, err := rec.Read(1024)
+		b, err := rec.Read8(1024)
 		if err != nil {
 			fmt.Printf("reading audio: %v\n", err)
 			continue
 		}
 
-		if err = play.Write(b); err != nil {
+		if err = play.Write8(b); err != nil {
 			fmt.Printf("writing audio: %v\n", err)
 			continue
 		}

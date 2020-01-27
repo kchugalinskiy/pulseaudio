@@ -6,7 +6,9 @@ package simple
 import "C"
 import (
 	"fmt"
+	"reflect"
 	"time"
+	"unsafe"
 )
 
 // Simple is a go-wrapper over pa_simple structure. See
@@ -93,9 +95,9 @@ func (s *Simple) Latency() (time.Duration, error) {
 	return time.Duration(latency) * time.Microsecond, nil
 }
 
-// Read blocks execution (!) until n bytes of data are read. Data read is encoded in specified on stream creation
+// Read8 blocks execution (!) until n bytes of data are read. Data read is encoded in specified on stream creation
 // PCM format.
-func (s *Simple) Read(n int) ([]byte, error) {
+func (s *Simple) Read8(n int) ([]byte, error) {
 	b := C.malloc(C.ulong(n))
 	var code C.int
 	C.pa_simple_read(s.simple, b, C.size_t(n), &code)
@@ -106,11 +108,110 @@ func (s *Simple) Read(n int) ([]byte, error) {
 	return C.GoBytes(b, C.int(n)), nil
 }
 
-// Write blocks execution until b PCM data in the specified during the creation PCM format is being written to the
+// Read16 blocks execution (!) until n bytes of data are read. Data read is encoded in specified on stream creation
+// PCM format.
+func (s *Simple) Read16(n int) ([]int16, error) {
+	b := C.malloc(C.ulong(n))
+	var code C.int
+	C.pa_simple_read(s.simple, b, C.size_t(n), &code)
+	if code != 0 {
+		return nil, fmt.Errorf("reading buffer: %v", errorFromCode(code))
+	}
+
+	return int16fromByte(C.GoBytes(b, C.int(n))), nil
+}
+
+// Read32 blocks execution (!) until n bytes of data are read. Data read is encoded in specified on stream creation
+// PCM format.
+func (s *Simple) Read32(n int) ([]int32, error) {
+	b := C.malloc(C.ulong(n))
+	var code C.int
+	C.pa_simple_read(s.simple, b, C.size_t(n), &code)
+	if code != 0 {
+		return nil, fmt.Errorf("reading buffer: %v", errorFromCode(code))
+	}
+
+	return int32fromByte(C.GoBytes(b, C.int(n))), nil
+}
+
+func int16fromByte(src []byte) []int16 {
+	var t []int16
+	n := len(src) / 2
+	header := *(*reflect.SliceHeader)(unsafe.Pointer(&t))
+	header.Data = reflect.ValueOf(src).Pointer()
+	header.Len = n
+	header.Cap = n
+	return *(*[]int16)(unsafe.Pointer(&header))
+}
+
+func int32fromByte(src []byte) []int32 {
+	var t []int32
+	n := len(src) / 4
+	header := *(*reflect.SliceHeader)(unsafe.Pointer(&t))
+	header.Data = reflect.ValueOf(src).Pointer()
+	header.Len = n
+	header.Cap = n
+	return *(*[]int32)(unsafe.Pointer(&header))
+}
+
+func newSlice(t reflect.Type, data unsafe.Pointer, n int) interface{} {
+	val := reflect.MakeSlice(t, n, n)
+	s := (*reflect.SliceHeader)(unsafe.Pointer(val.Pointer()))
+	s.Data = uintptr(data)
+	s.Len = n
+	s.Cap = n
+	return val.Interface()
+}
+
+// Write8 blocks execution until b PCM data in the specified during the creation PCM format is being written to the
 // write buffer.
-func (s *Simple) Write(b []byte) error {
+func (s *Simple) Write8(b []byte) error {
 	var code C.int
 	C.pa_simple_write(s.simple, C.CBytes(b[:]), C.size_t(len(b)), &code)
+	if code != 0 {
+		return fmt.Errorf("writing buffer: %v", errorFromCode(code))
+	}
+
+	return nil
+}
+
+func int16toByte(src []int16) []byte {
+	var t []byte
+	n := len(src) * 2
+	header := *(*reflect.SliceHeader)(unsafe.Pointer(&t))
+	header.Data = reflect.ValueOf(src).Pointer()
+	header.Len = n
+	header.Cap = n
+	return *(*[]byte)(unsafe.Pointer(&header))
+}
+
+func int32toByte(src []int32) []byte {
+	var t []byte
+	n := len(src) * 4
+	header := *(*reflect.SliceHeader)(unsafe.Pointer(&t))
+	header.Data = reflect.ValueOf(src).Pointer()
+	header.Len = n
+	header.Cap = n
+	return *(*[]byte)(unsafe.Pointer(&header))
+}
+
+// Write16 blocks execution until b PCM data in the specified during the creation PCM format is being written to the
+// write buffer.
+func (s *Simple) Write16(b []int16) error {
+	var code C.int
+	C.pa_simple_write(s.simple, C.CBytes(int16toByte(b)), C.size_t(len(b)), &code)
+	if code != 0 {
+		return fmt.Errorf("writing buffer: %v", errorFromCode(code))
+	}
+
+	return nil
+}
+
+// Write32 blocks execution until b PCM data in the specified during the creation PCM format is being written to the
+// write buffer.
+func (s *Simple) Write32(b []int32) error {
+	var code C.int
+	C.pa_simple_write(s.simple, C.CBytes(int32toByte(b)), C.size_t(len(b)), &code)
 	if code != 0 {
 		return fmt.Errorf("writing buffer: %v", errorFromCode(code))
 	}
