@@ -1,4 +1,4 @@
-package simple
+package sample
 
 // #include <pulse/sample.h>
 import "C"

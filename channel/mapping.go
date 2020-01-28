@@ -1,4 +1,4 @@
-package simple
+package channel
 
 // #include <pulse/simple.h>
 // #include <pulse/channelmap.h>
@@ -68,7 +68,7 @@ const (
 	ChannelPositionMax
 )
 
-func toChannel(p ChannelPosition) C.pa_channel_position_t {
+func Marshal(p ChannelPosition) C.pa_channel_position_t {
 	switch p {
 	case ChannelPositionInvalid:
 		return C.PA_CHANNEL_POSITION_INVALID

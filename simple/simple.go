@@ -1,7 +1,6 @@
 package simple
 
 // #include <pulse/simple.h>
-// #include <pulse/error.h>
 // #cgo LDFLAGS: -lpulse-simple -lpulse
 import "C"
 import (
@@ -9,6 +8,11 @@ import (
 	"reflect"
 	"time"
 	"unsafe"
+
+	"github.com/kchugalinskiy/pulseaudio/channel"
+	"github.com/kchugalinskiy/pulseaudio/sample"
+
+	"github.com/kchugalinskiy/pulseaudio/errs"
 )
 
 // Simple is a go-wrapper over pa_simple structure. See
@@ -19,16 +23,13 @@ type Simple struct {
 }
 
 // New simple API client. See Simple API documentation for the details.
-func New(server, name string, dir StreamDirection, dev, streamName string, ss *SampleSpec, m map[int]ChannelPosition, attr *BufferAttribute) (*Simple, error) {
+func New(server, name string, dir StreamDirection, dev, streamName string, ss *sample.Spec, m channel.Map, attr *BufferAttribute) (*Simple, error) {
 	var code C.int
 	var s Simple
+
 	var cmap *C.pa_channel_map
-	if len(m) != 0 {
-		cmap = &C.pa_channel_map{}
-		cmap.channels = C.uint8_t(len(m))
-		for k, v := range m {
-			cmap._map[k] = toChannel(v)
-		}
+	if m != nil {
+		cmap = (*C.pa_channel_map)(m.Marshal())
 	}
 
 	cserver := C.CString(server)
@@ -49,17 +50,13 @@ func New(server, name string, dir StreamDirection, dev, streamName string, ss *S
 	}
 	cattr := toAttr(attr)
 	cdir := toDirection(dir)
-	css := toSampleSpec(ss)
+	css := (*C.pa_sample_spec)(unsafe.Pointer(sample.Marshal(ss)))
 
 	s.simple = C.pa_simple_new(cserver, cname, cdir, cdev, cstream, css, cmap, cattr, &code)
 	if code != 0 {
-		return nil, fmt.Errorf("bad simple ctor code: %v", errorFromCode(code))
+		return nil, fmt.Errorf("bad simple ctor code: %v", errs.FromCode(int(code)))
 	}
 	return &s, nil
-}
-
-func errorFromCode(code C.int) error {
-	return fmt.Errorf(C.GoString(C.pa_strerror(code)))
 }
 
 // Flush the buffers.
@@ -67,7 +64,7 @@ func (s *Simple) Flush() error {
 	var code C.int
 	C.pa_simple_flush(s.simple, &code)
 	if code != 0 {
-		return fmt.Errorf("flushing buffers: %v", errorFromCode(code))
+		return fmt.Errorf("flushing buffers: %v", errs.FromCode(int(code)))
 	}
 
 	return nil
@@ -78,7 +75,7 @@ func (s *Simple) Drain() error {
 	var code C.int
 	C.pa_simple_drain(s.simple, &code)
 	if code != 0 {
-		return fmt.Errorf("draining buffers: %v", errorFromCode(code))
+		return fmt.Errorf("draining buffers: %v", errs.FromCode(int(code)))
 	}
 
 	return nil
@@ -89,7 +86,7 @@ func (s *Simple) Latency() (time.Duration, error) {
 	var code C.int
 	latency := C.pa_simple_get_latency(s.simple, &code)
 	if code != 0 {
-		return 0, fmt.Errorf("draining buffers: %v", errorFromCode(code))
+		return 0, fmt.Errorf("draining buffers: %v", errs.FromCode(int(code)))
 	}
 
 	return time.Duration(latency) * time.Microsecond, nil
@@ -102,7 +99,7 @@ func (s *Simple) Read8(n int) ([]byte, error) {
 	var code C.int
 	C.pa_simple_read(s.simple, b, C.size_t(n), &code)
 	if code != 0 {
-		return nil, fmt.Errorf("reading buffer: %v", errorFromCode(code))
+		return nil, fmt.Errorf("reading buffer: %v", errs.FromCode(int(code)))
 	}
 
 	return C.GoBytes(b, C.int(n)), nil
@@ -115,7 +112,7 @@ func (s *Simple) Read16(n int) ([]int16, error) {
 	var code C.int
 	C.pa_simple_read(s.simple, b, C.size_t(n), &code)
 	if code != 0 {
-		return nil, fmt.Errorf("reading buffer: %v", errorFromCode(code))
+		return nil, fmt.Errorf("reading buffer: %v", errs.FromCode(int(code)))
 	}
 
 	return int16fromByte(C.GoBytes(b, C.int(n))), nil
@@ -128,7 +125,7 @@ func (s *Simple) Read32(n int) ([]int32, error) {
 	var code C.int
 	C.pa_simple_read(s.simple, b, C.size_t(n), &code)
 	if code != 0 {
-		return nil, fmt.Errorf("reading buffer: %v", errorFromCode(code))
+		return nil, fmt.Errorf("reading buffer: %v", errs.FromCode(int(code)))
 	}
 
 	return int32fromByte(C.GoBytes(b, C.int(n))), nil
@@ -169,7 +166,7 @@ func (s *Simple) Write8(b []byte) error {
 	var code C.int
 	C.pa_simple_write(s.simple, C.CBytes(b[:]), C.size_t(len(b)), &code)
 	if code != 0 {
-		return fmt.Errorf("writing buffer: %v", errorFromCode(code))
+		return fmt.Errorf("writing buffer: %v", errs.FromCode(int(code)))
 	}
 
 	return nil
@@ -201,7 +198,7 @@ func (s *Simple) Write16(b []int16) error {
 	var code C.int
 	C.pa_simple_write(s.simple, C.CBytes(int16toByte(b)), C.size_t(len(b)), &code)
 	if code != 0 {
-		return fmt.Errorf("writing buffer: %v", errorFromCode(code))
+		return fmt.Errorf("writing buffer: %v", errs.FromCode(int(code)))
 	}
 
 	return nil
@@ -213,7 +210,7 @@ func (s *Simple) Write32(b []int32) error {
 	var code C.int
 	C.pa_simple_write(s.simple, C.CBytes(int32toByte(b)), C.size_t(len(b)), &code)
 	if code != 0 {
-		return fmt.Errorf("writing buffer: %v", errorFromCode(code))
+		return fmt.Errorf("writing buffer: %v", errs.FromCode(int(code)))
 	}
 
 	return nil
